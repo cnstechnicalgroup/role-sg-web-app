@@ -132,13 +132,13 @@
   set_fact:
     web_subnet_id: "{{ item.id }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_web_{{ mode }}"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_web"
 
 - local_action:
     module: ec2_elb_lb
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
-    name: "net_{{ prefix }}_{{ mode }}_elb"
+    name: "net-{{ prefix }}-{{ mode }}-elb"
     scheme: internet-facing
     state: present
     region: eu-west-1
