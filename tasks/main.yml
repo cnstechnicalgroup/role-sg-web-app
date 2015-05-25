@@ -1,0 +1,177 @@
+# Create VPC and subnets and optional availability zones.
+# The absence or presense of subnets deletes or creates them respectively.
+---
+- name: Normalize variables
+  set_fact:
+    mode: "{{ project.mode }}"
+    prefix: "{{ project.prefix }}"
+    use_elb: "{{ project.use_elb }}"
+    ssl_arn: "{{ project.ssl_arn }}"
+
+# Gather cidr addresses for each SG
+- name: Get app subnet address
+  set_fact:
+    app_cidr: "{{ item.cidr }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_app"
+
+- name: Get elb subnet address
+  set_fact:
+    elb_cidr: "{{ item.cidr }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_elb"
+
+- name: Get rdsa subnet address
+  set_fact:
+    rdsa_cidr: "{{ item.cidr }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_rdsa"
+
+- name: Get rdsb subnet address
+  set_fact:
+    rdsb_cidr: "{{ item.cidr }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_rdsb"
+
+- name: Get web subnet address
+  set_fact:
+    web_cidr: "{{ item.cidr }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_web"
+
+- name: ELB SG 
+  local_action:
+    module: ec2_group
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    name: "{{ prefix }}_{{ mode }}_elb"
+    description: ELB SG
+    vpc_id: "{{ vpc.vpc_id }}"
+    region: eu-west-1
+    rules:
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: 0.0.0.0/0
+      - proto: all
+        group_name: "{{ prefix }}_{{ mode }}_elb"
+    rules_egress:
+      - proto: all
+        from_port: all
+        to_port: all
+        cidr_ip: 0.0.0.0/0
+  register: elb_sg
+
+- name: Web Hosts SG 
+  local_action:
+    module: ec2_group
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    name: "{{ prefix }}_{{ mode }}_web"
+    description: Web Hosts SG
+    vpc_id: "{{ vpc.vpc_id }}"
+    region: eu-west-1
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: "{{ mgmt_cidr }}"
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: 0.0.0.0/0
+      - proto: all
+        group_name: "{{ prefix }}_{{ mode }}_web"
+    rules_egress:
+      - proto: all
+        from_port: all
+        to_port: all
+        cidr_ip: 0.0.0.0/0
+
+- name: App Hosts SG 
+  local_action:
+    module: ec2_group
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    name: "{{ prefix }}_{{ mode }}_app"
+    description: App Hosts SG
+    vpc_id: "{{ vpc.vpc_id }}"
+    region: eu-west-1
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: "{{ mgmt_cidr }}"
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: "{{ web_cidr }}"
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: "{{ web_cidr }}"
+      - proto: all
+        group_name: "{{ prefix }}_{{ mode }}_app"
+    rules_egress:
+      - proto: all
+        from_port: all
+        to_port: all
+        cidr_ip: 0.0.0.0/0
+
+# Grab the subnet_id for the Web SG
+# in order to build out the ELB
+- name: Get subnet id for ELB creation
+  set_fact:
+    web_subnet_id: "{{ item.id }}"
+  with_items: vpc.subnets
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_web_{{ mode }}"
+
+- local_action:
+    module: ec2_elb_lb
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    name: "net_{{ prefix }}_{{ mode }}_elb"
+    scheme: internet-facing
+    state: present
+    region: eu-west-1
+    validate_certs: no
+    subnets:
+      - "{{ web_subnet_id }}"
+    security_group_ids:
+      - "{{ elb_sg.group_id }}"
+    listeners:
+      - protocol: http
+        load_balancer_port: 80
+        instance_port: 80
+      - protocol: https
+        load_balancer_port: 443
+        instance_port: 443
+        instance_protocol: http
+        ssl_certificate_id: "{{ ssl_arn }}"
+    health_check:
+      ping_protocol: http
+      ping_port: 443
+      ping_path: "/ping"
+      response_timeout: 5
+      interval: 30
+      unhealthy_threshold: 2
+      healthy_threshold: 2
+  register: elb
+  when: use_elb
+
+- name: Create S3 bucket
+  local_action:
+    module: s3
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    bucket: "{{ prefix }}_{{ mode }}"
+    mode: create
+  register: s3bucket
