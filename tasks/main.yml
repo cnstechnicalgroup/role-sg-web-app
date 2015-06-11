@@ -13,38 +13,38 @@
   set_fact:
     app_cidr: "{{ item.cidr }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_app"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-app"
 
 - name: Get elb subnet address
   set_fact:
     elb_cidr: "{{ item.cidr }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_elb"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-elb"
 
 - name: Get rdsa subnet address
   set_fact:
     rdsa_cidr: "{{ item.cidr }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_rdsa"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-rdsa"
 
 - name: Get rdsb subnet address
   set_fact:
     rdsb_cidr: "{{ item.cidr }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_rdsb"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-rdsb"
 
 - name: Get web subnet address
   set_fact:
     web_cidr: "{{ item.cidr }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_web"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-web"
 
 - name: ELB SG 
   local_action:
     module: ec2_group
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
-    name: "{{ prefix }}_{{ mode }}_elb"
+    name: "{{ prefix }}-{{ mode }}-elb"
     description: ELB SG
     vpc_id: "{{ vpc.vpc_id }}"
     region: eu-west-1
@@ -58,7 +58,7 @@
         to_port: 443
         cidr_ip: 0.0.0.0/0
       - proto: all
-        group_name: "{{ prefix }}_{{ mode }}_elb"
+        group_name: "{{ prefix }}-{{ mode }}-elb"
     rules_egress:
       - proto: all
         from_port: all
@@ -71,7 +71,7 @@
     module: ec2_group
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
-    name: "{{ prefix }}_{{ mode }}_web"
+    name: "{{ prefix }}-{{ mode }}-web"
     description: Web Hosts SG
     vpc_id: "{{ vpc.vpc_id }}"
     region: eu-west-1
@@ -89,7 +89,7 @@
         to_port: 443
         cidr_ip: 0.0.0.0/0
       - proto: all
-        group_name: "{{ prefix }}_{{ mode }}_web"
+        group_name: "{{ prefix }}-{{ mode }}-web"
     rules_egress:
       - proto: all
         from_port: all
@@ -101,7 +101,7 @@
     module: ec2_group
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
-    name: "{{ prefix }}_{{ mode }}_app"
+    name: "{{ prefix }}-{{ mode }}-app"
     description: App Hosts SG
     vpc_id: "{{ vpc.vpc_id }}"
     region: eu-west-1
@@ -119,7 +119,7 @@
         to_port: 443
         cidr_ip: "{{ web_cidr }}"
       - proto: all
-        group_name: "{{ prefix }}_{{ mode }}_app"
+        group_name: "{{ prefix }}-{{ mode }}-app"
     rules_egress:
       - proto: all
         from_port: all
@@ -132,7 +132,7 @@
   set_fact:
     web_subnet_id: "{{ item.id }}"
   with_items: vpc.subnets
-  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}_{{ mode }}_web"
+  when: item.resource_tags['Name'] is defined and item.resource_tags['Name'] == "{{ prefix }}-{{ mode }}-web"
 
 - local_action:
     module: ec2_elb_lb
